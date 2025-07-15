@@ -1,8 +1,9 @@
 using JuMP
 using HiGHS
 
-function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
-    # horiz = length(d)  
+
+function optimize_cc_om_delay(ic, bds, a, d, df_input, fobj)
+    horiz = length(d)  
     optimal = false
 
     # bounds
@@ -10,6 +11,7 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
     YM = bds.YM     
     phiM = bds.phiM
     serM = bds.serM
+    tserM = bds.tserM
 
     J = zeros(horiz)            # cost function
     X = zeros(Int, horiz+1)     # current number of customers in queue x(k)S
@@ -17,37 +19,28 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
     Z = zeros(Int, horiz+1)     # custumers served  
     L = zeros(Int, horiz+1)     # number of customers lost
 
-    n = zeros(Int, horiz+1)     # number of empty slots in the queue
-    Q = zeros(Int, horiz+1)     # custumers entering queue
-    dr = zeros(Int, horiz+1)    # dropped due to full buffer
+    n = zeros(Int, horiz)     # number of empty slots in the queue
+    Q = zeros(Int, horiz)     # custumers entering queue
+    dr = zeros(Int, horiz)    # dropped due to full buffer
 
-    phi = zeros(Int, horiz+1)     # number of customers admitted to queue
-    Cin = zeros(Int, horiz+1)     # number of customers entering server
+    phi = zeros(Int, horiz)     # number of customers admitted to queue
+    Cin = zeros(Int, horiz)     # number of customers entering server
     Cout = zeros(Int, horiz+1)    # number of customers leaving server
 
-    S = zeros(Int, horiz+1)                 # number of active servers
-    Sa = zeros(Bool, horiz+1, serM)         # server activation status (0 - active, 1 - inactive)
-    Sl = zeros(Int, horiz+1)                # number of free available servers
-    Sst = zeros(Bool, horiz+1, serM)        # server status (0 - free, 1 - busy)
+    S = zeros(Int, horiz)                   # number of active servers
+    Sa = zeros(Bool, horiz, serM)           # server activation status (0 - active, 1 - inactive)
+    Sl = zeros(Int, horiz)                  # number of free available servers
+    Sst = zeros(Bool, horiz, serM)          # server status (0 - free, 1 - busy)
     Sc = zeros(Bool, horiz+1, serM, tserM)  # server conveyor
-    Sin = zeros(Bool, horiz+1, serM, tserM) # server input
+    Sin = zeros(Bool, horiz, serM, tserM)   # server input
 
-    Saux = zeros(Bool, horiz+1, serM)       # auxiliary server variable
+    Saux = zeros(Bool, horiz, serM)       # auxiliary server variable
     b1_opt = zeros(horiz)
-    b2_opt = zeros(horiz)
-
-    B = zeros(Float64, horiz+1)             # balking rate
+    # b2_opt = zeros(horiz)
 
     transition_matrix = zeros(Bool, tserM, tserM)
     for i in 1:tserM-1
         transition_matrix[i, i+1] = 1
-    end
-
-    if !rnd_tser
-        default_input = zeros(Bool, serM, tserM)  # default input (case with constant service time)
-        for i in 1:serM
-            default_input[i, 1] = 1
-        end
     end
 
     # initial conditions
@@ -67,44 +60,38 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
     @variable(cc_om_delay, 0 <= ZL[1:horiz+1], Int)  
     @variable(cc_om_delay, 0 <= LL[1:horiz+1], Int)         
                             
-    @variable(cc_om_delay, 0 <= nL[1:horiz+1] <= YM, Int) 
-    @variable(cc_om_delay, 0 <= QL[1:horiz+1], Int)      
-    @variable(cc_om_delay, 0 <= drL[1:horiz+1], Int)   
+    @variable(cc_om_delay, 0 <= nL[1:horiz] <= YM, Int) 
+    @variable(cc_om_delay, 0 <= QL[1:horiz], Int)      
+    @variable(cc_om_delay, 0 <= drL[1:horiz], Int)   
         
-    @variable(cc_om_delay, 0 <= phiL[1:horiz+1] <= phiM, Int)   
-    @variable(cc_om_delay, 0 <= CinL[1:horiz+1] <= serM, Int)   
+    @variable(cc_om_delay, 0 <= phiL[1:horiz] <= phiM, Int)   
+    @variable(cc_om_delay, 0 <= CinL[1:horiz] <= serM, Int)   
     @variable(cc_om_delay, 0 <= CoutL[1:horiz+1] <= serM, Int)    
 
-    @variable(cc_om_delay, 0 <= SL[1:horiz+1] <= serM, Int)  
-    @variable(cc_om_delay, 0 <= SaL[1:horiz+1, 1:serM], Bin)
-    @variable(cc_om_delay, 0 <= SlL[1:horiz+1] <= serM, Int)  
-    @variable(cc_om_delay, 0 <= SstL[1:horiz+1, 1:serM], Bin)  
+    @variable(cc_om_delay, 0 <= SL[1:horiz] <= serM, Int)  
+    @variable(cc_om_delay, 0 <= SaL[1:horiz, 1:serM], Bin)
+    @variable(cc_om_delay, 0 <= SlL[1:horiz] <= serM, Int)  
+    @variable(cc_om_delay, 0 <= SstL[1:horiz, 1:serM], Bin)  
     @variable(cc_om_delay, 0 <= ScL[1:horiz+1, 1:serM, 1:tserM], Bin) 
-    @variable(cc_om_delay, 0 <= SinL[1:horiz+1, 1:serM, 1:tserM], Bin)
-    @variable(cc_om_delay, 0 <= SauxL[1:horiz+1, 1:serM], Bin)
+    @variable(cc_om_delay, 0 <= SinL[1:horiz, 1:serM, 1:tserM], Bin)
+    @variable(cc_om_delay, 0 <= SauxL[1:horiz, 1:serM], Bin)
 
+    @constraint(cc_om_delay, XL[1] == X[1])
+    @constraint(cc_om_delay, YL[1] == Y[1])
+    @constraint(cc_om_delay, ZL[1] == Z[1])
+    @constraint(cc_om_delay, LL[1] == L[1])
 
     for t in 1:horiz
         M1 = max(d[t], YM) + 10; # must be larger than d[t] and n[t] 
-        M2 = max(X[t], serM) + 10; # must be larger than x[k] and Sl[k]
-
-        a[t] = min(X[t], max(0, Int.(round.(X[t]/4 .+ rand(Normal(0, std_dev))))))
-
-        if rnd_tser
-            default_input = zeros(Bool, serM, tserM)  
-            for i in 1:serM
-                slot = rand(1:tserM)  # randomly select a slot for each server
-                default_input[i, slot] = 1
-            end
-        end
+        # M2 = max(X[t], serM) + 10; # must be larger than x[k] and Sl[k]
 
         # Problem constraints  
         @constraint(cc_om_delay, XL[t+1] == XL[t] + phiL[t] - a[t] - CinL[t])
         @constraint(cc_om_delay, YL[t+1] == YL[t] + QL[t] - phiL[t])
-        @constraint(cc_om_delay, ZL[t+1] == ZL[t] + CoutL[t])
+        @constraint(cc_om_delay, ZL[t+1] == ZL[t] + CinL[t])
         @constraint(cc_om_delay, LL[t+1] == LL[t] + drL[t] + a[t])
 
-        @constraint(cc_om_delay, nL[t] == YM - YL[1] + phiL[t])  # number of empty slots in the queue
+        @constraint(cc_om_delay, nL[t] == YM - YL[t] + phiL[t])  # number of empty slots in the queue
         @constraint(cc_om_delay, QL[t] <= d[t])
         @constraint(cc_om_delay, QL[t] <= nL[t])
         @constraint(cc_om_delay, QL[t] >= d[t]-M1*b1[t])
@@ -113,10 +100,10 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
         @constraint(cc_om_delay, drL[t] >= d[t]-nL[t])         
         @constraint(cc_om_delay, drL[t] <= d[t]-QL[t]) 
 
-        @constraint(cc_om_delay, SL[t] == serM - sum(SaL[t]))              
+        @constraint(cc_om_delay, SL[t] == serM - sum(SaL[t,:]))              
         @constraint(cc_om_delay, SstL[t, :] == sum(ScL[t,:,:], dims=2))  
         @constraint(cc_om_delay, SlL[t] == SL[t] - sum(SstL[t,:]))    
-        @constraint(cc_om_delay, [i=1:serM, j=1:tserM], SinL[t, i, j] == default_input[i, j] .* SauxL[t, i])
+        @constraint(cc_om_delay, [i=1:serM, j=1:tserM], SinL[t, i, j] == df_input[t, i, j] .* SauxL[t, i])
         @constraint(cc_om_delay, ScL[t+1,:,:] == ScL[t,:,:]*transition_matrix + SinL[t,:,:])
 
         @constraint(cc_om_delay, CinL[t] <= XL[t]-a[t])
@@ -130,9 +117,11 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
     end
 
     # Objective function
-    @objective(cc_om_delay, Min, sum(LL) + c_ser*sum(SL) - c_cin*sum(CinL) - sum(phiL)) # design better objective function
+    @expression(cc_om_delay, expr, fobj(SL, drL, CinL, phiL, ZL, LL)) 
+    @objective(cc_om_delay, Min, expr)
 
     JuMP.optimize!(cc_om_delay)
+
     print("ok")
     status = termination_status(cc_om_delay)
     if (status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || status==MOI.ALMOST_LOCALLY_SOLVED) && has_values(cc_om_delay)
@@ -152,6 +141,7 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
 
         S = JuMP.value.(SL);
         Sl = JuMP.value.(SlL);
+        Sa = JuMP.value.(SaL);
         Sst = JuMP.value.(SstL);
         Sc = JuMP.value.(ScL);
         Sin = JuMP.value.(SinL);
@@ -161,16 +151,16 @@ function optimize_cc_om_delay(ic, bds, c_cin, c_ser, a, d, std_dev, rnd_tser)
         b2_opt = JuMP.value.(b2);
 
         J = objective_value(cc_om_delay)
-
+        
         optimal = true;
         # Display results
         # println("Optimal solution:")
         # println("Objective value = ", objective_value(cc_om_delay))
-    else
+    else        
         optimal = false
-        # println(t, " ", status)
+        println(status)
     end
 
-    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sst, Sc, Sin, Saux, b1_opt, b2_opt, J
+    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sa, Sst, Sc, Sin, Saux, b1_opt, b2_opt, J
 
 end

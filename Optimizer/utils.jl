@@ -25,27 +25,30 @@ end
 
 
 function df_input_generator(horiz, serM, tserM, rnd_tser)
-    df_input = zeros(horiz, serM, tserM)
+    final_input = zeros(horiz, serM, tserM)
     default_input = zeros(serM, tserM)
+
     for i in 1:serM
         default_input[i, 1] = 1
-    end 
+    end
 
+    KK = zeros(horiz, serM)
     for i in 1:horiz
         if rnd_tser
             rnd_input = zeros(serM, tserM)
+            rnd_index = Int.(round.(rand(Uniform(1,tserM), serM)))
             for j in 1:serM
-                slot = rand(1:tserM)  # randomly select a slot for each server
+                slot = rnd_index[j]  
                 rnd_input[j, slot] = 1
             end
-            df_input[i,:,:] = rnd_input 
+            final_input[i,:,:] = rnd_input
         else
-            df_input[i,:,:] = default_input
-        end 
-    end   
+            final_input[i,:,:] = default_input
+        end
+    end
 
-    return df_input
-end 
+    return final_input
+end
 
 
 function printTable(data, header)
