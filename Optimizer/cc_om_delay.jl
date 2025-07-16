@@ -2,7 +2,7 @@ using JuMP
 using HiGHS
 
 
-function optimize_cc_om_delay(ic, bds, a, d, df_input, fobj)
+function cc_om_delay(ic, bds, a, d, df_input, fobj)
     horiz = length(d)  
     optimal = false
 
@@ -106,10 +106,10 @@ function optimize_cc_om_delay(ic, bds, a, d, df_input, fobj)
         @constraint(cc_om_delay, [i=1:serM, j=1:tserM], SinL[t, i, j] == df_input[t, i, j] .* SauxL[t, i])
         @constraint(cc_om_delay, ScL[t+1,:,:] == ScL[t,:,:]*transition_matrix + SinL[t,:,:])
 
-        @constraint(cc_om_delay, CinL[t] <= XL[t]-a[t])
+        # @constraint(cc_om_delay, CinL[t] <= XL[t]-a[t])
         @constraint(cc_om_delay, CinL[t] <= SlL[t])
-        @constraint(cc_om_delay, CinL[t] >= XL[t]-a[t]-M2*b2[t])
-        @constraint(cc_om_delay, CinL[t] >= SlL[t]-(1-b2[t])*M2)  
+        # @constraint(cc_om_delay, CinL[t] >= XL[t]-a[t]-M2*b2[t])
+        # @constraint(cc_om_delay, CinL[t] >= SlL[t]-(1-b2[t])*M2)  
         @constraint(cc_om_delay, CoutL[t+1] == sum(ScL[t,:,tserM]))  
 
         @constraint(cc_om_delay, SauxL[t,:] <= ones(Bool, serM) - SstL[t,:] - SaL[t,:])  
@@ -161,6 +161,6 @@ function optimize_cc_om_delay(ic, bds, a, d, df_input, fobj)
         println(status)
     end
 
-    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sa, Sst, Sc, Sin, Saux, b1_opt, b2_opt, J
+    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sa, Sst, Sc, Sin, Saux, b1_opt, J
 
 end

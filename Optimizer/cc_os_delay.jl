@@ -2,7 +2,7 @@ using JuMP
 using HiGHS
 
 
-function optimize_cc_os_delay_1(ic, bds, a, d, df_input, fobj)
+function cc_os_delay(ic, bds, a, d, df_input, fobj)
     horiz = length(d)  
     optimal = false
     
@@ -142,14 +142,14 @@ function optimize_cc_os_delay_1(ic, bds, a, d, df_input, fobj)
 
             S[t] = JuMP.value(SL);
             Sl[t] = JuMP.value(SlL);
-            Sa[t] = JuMP.value(SaL);
-            Sst[t, :] = JuMP.value.(SstL);
-            Sc[t+1, :, :] = JuMP.value.(ScL[2, :, :]);
-            Sin[t, :, :] = JuMP.value.(SinL);
-            Saux[t, :] = JuMP.value.(SauxL);
+            Sa[t,:] = JuMP.value.(SaL);
+            Sst[t,:] = JuMP.value.(SstL);
+            Sc[t+1,:,:] = JuMP.value.(ScL[2, :, :]);
+            Sin[t,:,:] = JuMP.value.(SinL);
+            Saux[t,:] = JuMP.value.(SauxL);
 
             b1_opt[t] = JuMP.value(b1);
-            b2_opt[t] = JuMP.value(b2);
+            # b2_opt[t] = JuMP.value(b2);
 
             J[t] = objective_value(cc_os_delay)
 
@@ -164,6 +164,6 @@ function optimize_cc_os_delay_1(ic, bds, a, d, df_input, fobj)
         end
     end
 
-    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sa, Sst, Sc, Sin, Saux, b1_opt, b2_opt, J
+    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sa, Sst, Sc, Sin, Saux, b1_opt, J
 
 end
