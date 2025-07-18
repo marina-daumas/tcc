@@ -6,7 +6,7 @@ using Ipopt
 using HiGHS
 using Juniper
 
-function cc_os_original(ic,bds,c_ser,c_blr,d,a)
+function cc_os_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
     # Time horizon
     horiz = length(d)
 
@@ -40,17 +40,22 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a)
  
         # Setting up solvers and their attributes
         # Optimization problem
-        ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
-        highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
-        cc_nl_fobj_os = Model(
-            optimizer_with_attributes(
-                Juniper.Optimizer, 
-                "nl_solver" => ipopt,
-                "mip_solver" => highs, 
-                "allow_almost_solved" => false,
-                "feasibility_pump" => true        
-                )
-        )        
+
+        if nl
+            ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
+            highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
+            cc_nl_fobj_os = Model(
+                optimizer_with_attributes(
+                    Juniper.Optimizer, 
+                    "nl_solver" => ipopt,
+                    "mip_solver" => highs, 
+                    "allow_almost_solved" => false,
+                    "feasibility_pump" => true        
+                    )
+            )      
+        else
+            cc_nl_fobj_os = Model(HiGHS.Optimizer)
+        end
         
         # No screen output
         set_silent(cc_nl_fobj_os)
@@ -97,17 +102,16 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a)
         @constraint(cc_nl_fobj_os, 0 <= XL[2] <= bds.XM)
         @constraint(cc_nl_fobj_os, 0 <= YL[2] <= bds.YM)
        
-        # Objective function        
-        @NLobjective(cc_nl_fobj_os, Min, c_ser*serL + c_blr*LL[2]/(LL[2] + ZL[2]) )
-    
-        # Compute solution    
-        JuMP.optimize!(cc_nl_fobj_os)
+        # Objective function     
+        if nl   
+            @NLobjective(cc_nl_fobj_os, Min, c_ser*serL + c_blr*LL[2]/(LL[2] + ZL[2]) )
+        else
+            @expression(cc_nl_fobj_os, expr, fobj(serL, drL, serL, phiL, ZL[2], LL[2])) 
+            @objective(cc_nl_fobj_os, Min, expr)  
+        end
 
-        # Print the model
-        #print(cc_nl_fobj_os)
-   
-        # Save objective value
-        J[t] = objective_value(cc_nl_fobj_os) #Repeated line
+        # Compute solution  
+        JuMP.optimize!(cc_nl_fobj_os)
         
         # Check if solver found optimal solution
         status = termination_status(cc_nl_fobj_os)
