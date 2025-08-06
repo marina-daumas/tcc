@@ -128,7 +128,7 @@ function cc_om_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
         b_om = value.(b);
         dr_om = value.(drL_om);
 
-        optimal=true
+        optimal = true
         print("ok")
     else
         optimal = false
