@@ -4,6 +4,7 @@ using Distributions
 using LaTeXStrings
 using Plots
 
+
 function demand_generator_mat(N_dem, demand_length, dM, demand_type, std_dev)
     d_mat = zeros(demand_length, N_dem)
     for j in 1:N_dem
@@ -61,4 +62,13 @@ function plotData(evolution, ylabel, title)
     gr()
     plot(evolution, layout = 4, seriestype=:scatter, label=false,xlabel=[L"k" L"k" L"k" L"k"],ylabel=ylabel, title=title,
         palette=cgrad.([:grays :blues :heat :lightrainbow]), bg_inside=[:lightblue :lightblue :lightblue :lightblue])
+end
+
+
+function plot_results(res, horiz, i)
+    println(res.id)
+    evolution = [res.X[i, 1:horiz,1], res.Z[i, 1:horiz,1], res.S[i, 1:horiz,1], res.L[i, 1:horiz,1]]
+    ylabel = [L"X" L"Z" L"S" L"L"]
+    title = ["queue occupancy" "total customers" "active servers" "lost customers"]
+    plotData(evolution, ylabel, title)
 end

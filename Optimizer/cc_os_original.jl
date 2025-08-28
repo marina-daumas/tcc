@@ -6,7 +6,7 @@ using Ipopt
 using HiGHS
 using Juniper
 
-function cc_os_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
+function cc_os_original(ic,bds,c_ser,c_blr,d,a,fobj)
     # Time horizon
     horiz = length(d)
 
@@ -41,22 +41,18 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
         # Setting up solvers and their attributes
         # Optimization problem
 
-        if nl
-            ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
-            highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
-            cc_nl_fobj_os = Model(
-                optimizer_with_attributes(
-                    Juniper.Optimizer, 
-                    "nl_solver" => ipopt,
-                    "mip_solver" => highs, 
-                    "allow_almost_solved" => false,
-                    "feasibility_pump" => true        
-                    )
-            )      
-        else
-            cc_nl_fobj_os = Model(HiGHS.Optimizer)
-        end
         
+        ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
+        highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
+        cc_nl_fobj_os = Model(
+            optimizer_with_attributes(
+                Juniper.Optimizer, 
+                "nl_solver" => ipopt,
+                "mip_solver" => highs, 
+                "allow_almost_solved" => false,
+                "feasibility_pump" => true        
+                ))      
+            
         # No screen output
         set_silent(cc_nl_fobj_os)
         
@@ -103,12 +99,7 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
         @constraint(cc_nl_fobj_os, 0 <= YL[2] <= bds.YM)
        
         # Objective function     
-        if nl   
-            @NLobjective(cc_nl_fobj_os, Min, c_ser*serL + c_blr*LL[2]/(LL[2] + ZL[2]) )
-        else
-            @expression(cc_nl_fobj_os, expr, fobj(serL, drL, serL, phiL, ZL[2], LL[2])) 
-            @objective(cc_nl_fobj_os, Min, expr)  
-        end
+        @NLobjective(cc_nl_fobj_os, Min, c_ser*serL + c_blr*LL[2]/(LL[2] + ZL[2]) )
 
         # Compute solution  
         JuMP.optimize!(cc_nl_fobj_os)
@@ -117,24 +108,25 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
         status = termination_status(cc_nl_fobj_os)
         if (status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || status==MOI.ALMOST_LOCALLY_SOLVED) && has_values(cc_nl_fobj_os)
             # Get and save solution of each optimization problem
-            X[t+1] = JuMP.value(XL[2]);
-            Y[t+1] = JuMP.value(YL[2]);
-            L[t+1] = JuMP.value(LL[2]);
-            Z[t+1] = JuMP.value(ZL[2]);
-            blr[t+1] = L[t+1]/(L[t+1] + Z[t+1])
-            dr[t]  = JuMP.value(drL);
-            n[t]   = JuMP.value(nL);
-            ser[t] = JuMP.value(serL);
-            phi[t] = JuMP.value(phiL);
-            Q[t]   = JuMP.value(QL);  
-            b_opt[t] = JuMP.value(b);
+            X[t+1] = round.(JuMP.value(XL[2]));
+            Y[t+1] = round.(JuMP.value(YL[2]));
+            L[t+1] = round.(JuMP.value(LL[2]));
+            Z[t+1] = round.(JuMP.value(ZL[2]));
 
+            dr[t]  = round.(JuMP.value(drL));
+            n[t]   = round.(JuMP.value(nL));
+            ser[t] = round.(JuMP.value(serL));
+            phi[t] = round.(JuMP.value(phiL));
+            Q[t]   = round.(JuMP.value(QL));
+            b_opt[t] = round.(JuMP.value(b));
+
+            blr[t+1] = L[t+1]/(L[t+1] + Z[t+1])
             J[t] =  objective_value(cc_nl_fobj_os)
 
             # Informs the calling function an optimal solution was found
             optimal = true;               
         else
-            println("Problem is infeasible...")
+            println(status)
             
             X = zeros(horiz+1)
             Y = zeros(horiz+1)
@@ -146,7 +138,6 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
             break
         end
     end
-    print("ok")
 
-    return optimal, X, Y, Z, L, n, Q, dr, phi, ser, b_opt, J 
+    return optimal, X, Y, Z, L, n, Q, dr, phi, ser, J 
 end

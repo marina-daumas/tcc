@@ -24,8 +24,7 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
     dr = zeros(Int, horiz)    # dropped due to full buffer
 
     phi = zeros(Int, horiz)     # number of customers admitted to queue
-    Cin = zeros(Int, horiz)     # number of customers entering server
-    Cout = zeros(Int, horiz+1)    # number of customers leaving server
+    Cin = zeros(Int, horiz)     # number of customers entering Server
 
     S = zeros(Int, horiz)                   # number of active servers
     Sa = zeros(Bool, horiz, serM)           # server activation status (0 - active, 1 - inactive)
@@ -66,7 +65,6 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
         
     @variable(cc_om_delay, 0 <= phiL[1:horiz] <= phiM, Int)   
     @variable(cc_om_delay, 0 <= CinL[1:horiz] <= serM, Int)   
-    @variable(cc_om_delay, 0 <= CoutL[1:horiz+1] <= serM, Int)    
 
     @variable(cc_om_delay, 0 <= SL[1:horiz] <= serM, Int)  
     @variable(cc_om_delay, 0 <= SaL[1:horiz, 1:serM], Bin)
@@ -106,11 +104,7 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
         @constraint(cc_om_delay, [i=1:serM, j=1:tserM], SinL[t, i, j] == df_input[t, i, j] .* SauxL[t, i])
         @constraint(cc_om_delay, ScL[t+1,:,:] == ScL[t,:,:]*transition_matrix + SinL[t,:,:])
 
-        # @constraint(cc_om_delay, CinL[t] <= XL[t]-a[t])
         @constraint(cc_om_delay, CinL[t] <= SlL[t])
-        # @constraint(cc_om_delay, CinL[t] >= XL[t]-a[t]-M2*b2[t])
-        # @constraint(cc_om_delay, CinL[t] >= SlL[t]-(1-b2[t])*M2)  
-        @constraint(cc_om_delay, CoutL[t+1] == sum(ScL[t,:,tserM]))  
 
         @constraint(cc_om_delay, SauxL[t,:] <= ones(Bool, serM) - SstL[t,:] - SaL[t,:])  
         @constraint(cc_om_delay, CinL[t] == sum(SauxL[t,:]))  
@@ -122,33 +116,30 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
 
     JuMP.optimize!(cc_om_delay)
 
-    print("ok")
     status = termination_status(cc_om_delay)
     if (status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || status==MOI.ALMOST_LOCALLY_SOLVED) && has_values(cc_om_delay)
         # Save computed values
-        X = JuMP.value.(XL);
-        Y = JuMP.value.(YL);
-        Z = JuMP.value.(ZL);
-        L = JuMP.value.(LL);
+        X = round.(JuMP.value.(XL));
+        Y = round.(JuMP.value.(YL));
+        Z = round.(JuMP.value.(ZL));
+        L = round.(JuMP.value.(LL));
 
-        n = JuMP.value.(nL);
-        Q = JuMP.value.(QL);  
-        dr = JuMP.value.(drL);
-        
-        phi = JuMP.value.(phiL);
-        Cin = JuMP.value.(CinL);
-        Cout = JuMP.value.(CoutL);
+        n = round.(JuMP.value.(nL));
+        Q = round.(JuMP.value.(QL));
+        dr = round.(JuMP.value.(drL));
 
-        S = JuMP.value.(SL);
-        Sl = JuMP.value.(SlL);
-        Sa = JuMP.value.(SaL);
-        Sst = JuMP.value.(SstL);
-        Sc = JuMP.value.(ScL);
-        Sin = JuMP.value.(SinL);
-        Saux = JuMP.value.(SauxL);
+        phi = round.(JuMP.value.(phiL));
+        Cin = round.(JuMP.value.(CinL));
 
-        b1_opt = JuMP.value.(b1);
-        b2_opt = JuMP.value.(b2);
+        S = round.(JuMP.value.(SL));
+        Sl = round.(JuMP.value.(SlL));
+        Sa = round.(JuMP.value.(SaL));
+        Sst = round.(JuMP.value.(SstL));
+        Sc = round.(JuMP.value.(ScL));
+        Sin = round.(JuMP.value.(SinL));
+        Saux = round.(JuMP.value.(SauxL));
+
+        b1_opt = round.(JuMP.value.(b1));
 
         J = objective_value(cc_om_delay)
         
@@ -160,7 +151,7 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
         optimal = false
         println(status)
     end
-
-    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, Cout, S, Sl, Sa, Sst, Sc, Sin, Saux, b1_opt, J
+    
+    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, S, Sl, Sa, Sst, Sc, Sin, Saux, J
 
 end

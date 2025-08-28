@@ -7,7 +7,7 @@ using HiGHS
 using Juniper
 using GLPK #not being used 
 
-function cc_om_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
+function cc_om_original(ic,bds,c_ser,c_blr,d,a,fobj)
     # Check for optimality
     optimal = false
 
@@ -22,7 +22,7 @@ function cc_om_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
     Q_om  = zeros(horiz)
     L_om  = zeros(horiz+1)
     Z_om  = zeros(horiz+1)
-    J_om = 0 #zeros(horiz)
+    J_om = 0 
     blr_om = zeros(horiz+1)
     b_om = zeros(horiz)
 
@@ -34,22 +34,19 @@ function cc_om_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
 
     
     # Setting up solvers and their attributes
-    if nl
-        ipopt  = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
-        mipSolver = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
-        
-        cc_nl_fobj_om = Model(
-            optimizer_with_attributes(
-                Juniper.Optimizer, 
-                "nl_solver" => ipopt,
-                "mip_solver" => mipSolver, 
-                "allow_almost_solved" => false,
-                "feasibility_pump" => true
-                ))
-    else
-        cc_nl_fobj_om = Model(HiGHS.Optimizer)
-    end
+   
+    ipopt  = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
+    mipSolver = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
     
+    cc_nl_fobj_om = Model(
+        optimizer_with_attributes(
+            Juniper.Optimizer, 
+            "nl_solver" => ipopt,
+            "mip_solver" => mipSolver, 
+            "allow_almost_solved" => false,
+            "feasibility_pump" => true
+            ))
+  
     # No screen output
     set_silent(cc_nl_fobj_om)
        
@@ -96,14 +93,10 @@ function cc_om_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
         @constraint(cc_nl_fobj_om, 0 <= YL_om[t+1] <= bds.YM)
     end
     
-    if nl
-        fobj_nl(s,L,Z) = c_ser*sum(s) + c_blr*sum( L./(L .+ Z))
-        @expression(cc_nl_fobj_om, expr, fobj_nl(serL_om, LL_om, ZL_om))    
-        @objective(cc_nl_fobj_om, Min, expr) # uses the expression to define the nonlinear objective function   
-    else
-        @expression(cc_nl_fobj_om, expr, fobj(serL_om, drL_om, serL_om, phiL_om, ZL_om, LL_om)) 
-        @objective(cc_nl_fobj_om, Min, expr)
-    end
+   
+    fobj_nl(s,L,Z) = c_ser*sum(s) + c_blr*sum( L./(L .+ Z))
+    @expression(cc_nl_fobj_om, expr, fobj_nl(serL_om, LL_om, ZL_om))    
+    @objective(cc_nl_fobj_om, Min, expr) # uses the expression to define the nonlinear objective function   
     
     # Compute solution    
     JuMP.optimize!(cc_nl_fobj_om)
@@ -114,26 +107,27 @@ function cc_om_original(ic,bds,c_ser,c_blr,d,a,nl,fobj)
     status = termination_status(cc_nl_fobj_om)
     if (status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || status==MOI.ALMOST_LOCALLY_SOLVED) && has_values(cc_nl_fobj_om)
         # Get and save solution of each optimization problem
-        
-        X_om = JuMP.value.(XL_om);
-        Y_om = JuMP.value.(YL_om);
-        ser_om = JuMP.value.(serL_om);
-        L_om = JuMP.value.(LL_om);
-        Z_om = JuMP.value.(ZL_om);
+
+        X_om = round.(JuMP.value.(XL_om));
+        Y_om = round.(JuMP.value.(YL_om));
+        ser_om = round.(JuMP.value.(serL_om));
+        L_om = round.(JuMP.value.(LL_om));
+        Z_om = round.(JuMP.value.(ZL_om));
+
+        phi_om = round.(JuMP.value.(phiL_om));
+        n_om = round.(JuMP.value.(nL_om));
+        Q_om = round.(JuMP.value.(QL_om));
+        b_om = round.(JuMP.value.(b));
+        dr_om = round.(JuMP.value.(drL_om));
+
+
         blr_om = L_om ./(L_om .+ Z_om);
 
-        phi_om = value.(phiL_om);
-        n_om = value.(nL_om);
-        Q_om = value.(QL_om);
-        b_om = value.(b);
-        dr_om = value.(drL_om);
-
         optimal = true
-        print("ok")
     else
         optimal = false
         println(status)
     end
    
-    return optimal, X_om, Y_om, Z_om, L_om, n_om, Q_om, dr_om, phi_om, ser_om, b_om, J_om
+    return optimal, X_om, Y_om, Z_om, L_om, n_om, Q_om, dr_om, phi_om, ser_om, J_om
 end
