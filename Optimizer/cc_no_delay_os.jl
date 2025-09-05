@@ -6,12 +6,18 @@ using Ipopt
 using HiGHS
 using Juniper
 
-function cc_os_original(ic,bds,c_ser,c_blr,d,a,fobj)
+function cc_no_delay_os(ic, bds, c, a, d)
     # Time horizon
     horiz = length(d)
 
     # Check for optimality
     optimal=false
+
+    # bounds
+    XM = bds.XM
+    YM = bds.YM     
+    phiM = bds.phiM
+    serM = bds.serM
 
     # Output variables
     J = zeros(horiz)     #Cost function
@@ -37,13 +43,10 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,fobj)
     
     # Optimization loop
     for t in 1:horiz  
- 
         # Setting up solvers and their attributes
-        # Optimization problem
-
-        
         ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
         highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
+
         cc_nl_fobj_os = Model(
             optimizer_with_attributes(
                 Juniper.Optimizer, 
@@ -57,14 +60,14 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,fobj)
         set_silent(cc_nl_fobj_os)
         
         # For the integer constraint on variable b
-        M = max(d[t], bds.YM)+10; # must be larger than d[t] and n[t]    
+        M = max(d[t], YM)+10; # must be larger than d[t] and n[t]    
         
         # Optimization variables
-        @variable(cc_nl_fobj_os, 0 <= XL[1:2] <= bds.XM, Int)
-        @variable(cc_nl_fobj_os, 0 <= YL[1:2] <= bds.YM, Int)
-        @variable(cc_nl_fobj_os, 0 <= serL <= bds.serM, Int)
-        @variable(cc_nl_fobj_os, 0 <= phiL <= bds.phiM, Int)
-        @variable(cc_nl_fobj_os, 0 <= nL <= bds.YM, Int)
+        @variable(cc_nl_fobj_os, 0 <= XL[1:2] <= XM, Int)
+        @variable(cc_nl_fobj_os, 0 <= YL[1:2] <= YM, Int)
+        @variable(cc_nl_fobj_os, 0 <= serL <= serM, Int)
+        @variable(cc_nl_fobj_os, 0 <= phiL <= phiM, Int)
+        @variable(cc_nl_fobj_os, 0 <= nL <= YM, Int)
         @variable(cc_nl_fobj_os, 0 <= drL, Int)
         @variable(cc_nl_fobj_os, 0 <= QL, Int)
         @variable(cc_nl_fobj_os, b , Bin);
@@ -80,7 +83,7 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,fobj)
         # Problem constraints    
         @constraint(cc_nl_fobj_os, XL[2] == XL[1] + phiL - serL - a[t] )
         @constraint(cc_nl_fobj_os, YL[2] == YL[1] + QL - phiL )
-        @constraint(cc_nl_fobj_os, nL   == bds.YM + phiL - YL[1])      
+        @constraint(cc_nl_fobj_os, nL   == YM + phiL - YL[1])      
         @constraint(cc_nl_fobj_os, drL >= d[t]-nL)         
         @constraint(cc_nl_fobj_os, drL <= d[t]-QL) 
 
@@ -92,14 +95,13 @@ function cc_os_original(ic,bds,c_ser,c_blr,d,a,fobj)
         @constraint(cc_nl_fobj_os, LL[2] == LL[1] + drL + a[t])
         @constraint(cc_nl_fobj_os, ZL[2] == ZL[1] + serL)         
 
-        @constraint(cc_nl_fobj_os, 0 <= serL <= bds.serM)
-        #@constraint(CallCenter_L_osa, serM - 2 <= serL <= serM)
-        @constraint(cc_nl_fobj_os, 0 <= phiL <= bds.phiM)
-        @constraint(cc_nl_fobj_os, 0 <= XL[2] <= bds.XM)
-        @constraint(cc_nl_fobj_os, 0 <= YL[2] <= bds.YM)
+        @constraint(cc_nl_fobj_os, 0 <= serL <= serM)
+        @constraint(cc_nl_fobj_os, 0 <= phiL <= phiM)
+        @constraint(cc_nl_fobj_os, 0 <= XL[2] <= XM)
+        @constraint(cc_nl_fobj_os, 0 <= YL[2] <= YM)
        
         # Objective function     
-        @NLobjective(cc_nl_fobj_os, Min, c_ser*serL + c_blr*LL[2]/(LL[2] + ZL[2]) )
+        @NLobjective(cc_nl_fobj_os, Min, c.ser*serL + c.blr*LL[2]/(LL[2] + ZL[2]))
 
         # Compute solution  
         JuMP.optimize!(cc_nl_fobj_os)

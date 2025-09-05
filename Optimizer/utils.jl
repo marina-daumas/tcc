@@ -25,27 +25,16 @@ function demand_generator_mat(N_dem, demand_length, dM, demand_type, std_dev)
 end
 
 
-function df_input_generator(horiz, serM, tserM, rnd_tser)
+function df_input_generator(horiz, serM, tserM)
     final_input = zeros(horiz, serM, tserM)
-    default_input = zeros(serM, tserM)
-
-    for i in 1:serM
-        default_input[i, 1] = 1
-    end
-
-    KK = zeros(horiz, serM)
     for i in 1:horiz
-        if rnd_tser
-            rnd_input = zeros(serM, tserM)
-            rnd_index = Int.(round.(rand(Uniform(1,tserM), serM)))
-            for j in 1:serM
-                slot = rnd_index[j]  
-                rnd_input[j, slot] = 1
-            end
-            final_input[i,:,:] = rnd_input
-        else
-            final_input[i,:,:] = default_input
+        rnd_input = zeros(serM, tserM)
+        rnd_index = Int.(round.(rand(Uniform(1,tserM), serM)))
+        for j in 1:serM
+            slot = rnd_index[j]  
+            rnd_input[j, slot] = 1
         end
+        final_input[i,:,:] = rnd_input
     end
 
     return final_input
@@ -67,7 +56,7 @@ end
 
 function plot_results(res, horiz, i)
     println(res.id)
-    evolution = [res.X[i, 1:horiz,1], res.Z[i, 1:horiz,1], res.S[i, 1:horiz,1], res.L[i, 1:horiz,1]]
+    evolution = [res.X[i, 1:horiz,1], res.Z[i, 1:horiz,1], res.Ser[i, 1:horiz,1], res.L[i, 1:horiz,1]]
     ylabel = [L"X" L"Z" L"S" L"L"]
     title = ["queue occupancy" "total customers" "active servers" "lost customers"]
     plotData(evolution, ylabel, title)

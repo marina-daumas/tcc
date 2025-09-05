@@ -1,10 +1,16 @@
+# Call Center Model One Step Ahead (OSA) optimization with delay 
+# Linear objective function
+
 using JuMP
 using HiGHS
 
 
-function cc_os_delay(ic, bds, a, d, df_input, fobj)
-    horiz = length(d)  
-    optimal = false
+function cc_delay_os(ic, bds, c, a, d, df_input)
+    # Time horizon
+    horiz = length(d)
+
+    # Check for optimality
+    optimal=false
     
     # bounds
     XM = bds.XM
@@ -34,8 +40,6 @@ function cc_os_delay(ic, bds, a, d, df_input, fobj)
     Sin = zeros(Bool, horiz, serM, tserM)   # server input
 
     Saux = zeros(Bool, horiz, serM)       # auxiliary server variable
-    b1_opt = zeros(horiz)
-    # b2_opt = zeros(horiz)
 
     transition_matrix = zeros(Bool, tserM, tserM)
     for i in 1:tserM-1
@@ -52,11 +56,8 @@ function cc_os_delay(ic, bds, a, d, df_input, fobj)
         cc_os_delay = Model(HiGHS.Optimizer)
         set_silent(cc_os_delay)
 
-        M1 = max(d[t], YM) + 10; # must be larger than d[t] and n[t] 
-        @variable(cc_os_delay, b1, Bin);
-
-        # M2 = max(X[t], serM) + 10; # must be larger than x[k] and Sl[k]
-        # @variable(cc_os_delay, b2, Bin);
+        M = max(d[t], YM) + 10; # must be larger than d[t] and n[t] 
+        @variable(cc_os_delay, b, Bin);
 
         @variable(cc_os_delay, 0 <= XL[1:2] <= XM, Int)    
         @variable(cc_os_delay, 0 <= YL[1:2] <= YM, Int)     
@@ -94,25 +95,29 @@ function cc_os_delay(ic, bds, a, d, df_input, fobj)
         @constraint(cc_os_delay, nL == YM - YL[1] + phiL)  # number of empty slots in the queue
         @constraint(cc_os_delay, QL <= d[t])
         @constraint(cc_os_delay, QL <= nL)
-        @constraint(cc_os_delay, QL >= d[t]-M1*b1)
-        @constraint(cc_os_delay, QL >= nL-(1-b1)*M1)  
+        @constraint(cc_os_delay, QL >= d[t]-M*b)
+        @constraint(cc_os_delay, QL >= nL-(1-b)*M)  
 
         @constraint(cc_os_delay, drL >= d[t]-nL)         
         @constraint(cc_os_delay, drL <= d[t]-QL) 
 
         @constraint(cc_os_delay, SL == serM - sum(SaL))              
         @constraint(cc_os_delay, SstL == sum(ScL[1,:,:], dims=2))  
-        # @constraint(cc_os_delay, SlL == SL - sum(SstL))    
-        @constraint(cc_os_delay, [i=1:serM, j=1:tserM], SinL[i, j] == df_input[t, i, j] .* SauxL[i])
+        @constraint(cc_os_delay, SauxL <= ones(Bool, serM) - SstL - SaL)  
+        
         @constraint(cc_os_delay, ScL[2, :, :] == ScL[1, :, :]*transition_matrix + SinL)
+        @constraint(cc_os_delay, [i=1:serM, j=1:tserM], SinL[i, j] == df_input[t, i, j] .* SauxL[i])
 
+
+        @constraint(cc_os_delay, CinL == sum(SauxL))  
         @constraint(cc_os_delay, CinL <= SL - sum(SstL))
 
-        @constraint(cc_os_delay, SauxL <= ones(Bool, serM) - SstL - SaL)  
-        @constraint(cc_os_delay, CinL == sum(SauxL))  
+        # @constraint(cc_os_delay, SlL == SL - sum(SstL))    
 
         # Objective function
-        @expression(cc_os_delay, expr, fobj(SL, drL, CinL, phiL, ZL[2], LL[2])) 
+
+        lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.z*sum(Z) +c.L*sum(L)
+        @expression(cc_os_delay, expr, lin_fobj(SL, drL, CinL, phiL, ZL[2], LL[2])) 
         @objective(cc_os_delay, Min, expr)
 
         JuMP.optimize!(cc_os_delay)
@@ -140,14 +145,9 @@ function cc_os_delay(ic, bds, a, d, df_input, fobj)
             Sin[t,:,:] = round.(JuMP.value.(SinL));
             Saux[t,:] = round.(JuMP.value.(SauxL));
 
-            b1_opt[t] = round.(JuMP.value(b1));
-
             J[t] = objective_value(cc_os_delay)
 
             optimal = true;
-            # Display results
-            # println("Optimal solution:")
-            # println("Objective value = ", objective_value(cc_os_delay))
         else
             optimal = false;
             println(status)

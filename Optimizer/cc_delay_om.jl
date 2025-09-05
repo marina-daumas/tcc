@@ -1,10 +1,16 @@
+# Call Center Model Omniscient optimization with delay 
+# Linear objective function
+
 using JuMP
 using HiGHS
 
 
-function cc_om_delay(ic, bds, a, d, df_input, fobj)
-    horiz = length(d)  
-    optimal = false
+function cc_delay_om(ic, bds, c, a, d, df_input)
+    # Time horizon
+    horiz = length(d)
+
+    # Check for optimality
+    optimal=false
 
     # bounds
     XM = bds.XM
@@ -14,33 +20,26 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
     tserM = bds.tserM
 
     J = zeros(horiz)            # cost function
-    X = zeros(Int, horiz+1)     # current number of customers in queue x(k)S
-    Y = zeros(Int, horiz+1)     # current number of customers in buffer y(k)  
-    Z = zeros(Int, horiz+1)     # custumers served  
-    L = zeros(Int, horiz+1)     # number of customers lost
+    X = zeros(horiz+1)     # current number of customers in queue x(k)S
+    Y = zeros(horiz+1)     # current number of customers in buffer y(k)  
+    Z = zeros(horiz+1)     # custumers served  
+    L = zeros(horiz+1)     # number of customers lost
 
-    n = zeros(Int, horiz)     # number of empty slots in the queue
-    Q = zeros(Int, horiz)     # custumers entering queue
-    dr = zeros(Int, horiz)    # dropped due to full buffer
+    n = zeros(horiz)     # number of empty slots in the queue
+    Q = zeros(horiz)     # custumers entering queue
+    dr = zeros(horiz)    # dropped due to full buffer
 
-    phi = zeros(Int, horiz)     # number of customers admitted to queue
-    Cin = zeros(Int, horiz)     # number of customers entering Server
+    phi = zeros(horiz)     # number of customers admitted to queue
+    Cin = zeros(horiz)     # number of customers entering Server
 
-    S = zeros(Int, horiz)                   # number of active servers
-    Sa = zeros(Bool, horiz, serM)           # server activation status (0 - active, 1 - inactive)
-    Sl = zeros(Int, horiz)                  # number of free available servers
-    Sst = zeros(Bool, horiz, serM)          # server status (0 - free, 1 - busy)
-    Sc = zeros(Bool, horiz+1, serM, tserM)  # server conveyor
-    Sin = zeros(Bool, horiz, serM, tserM)   # server input
+    S = zeros(horiz)                   # number of active servers
+    Sa = zeros(horiz, serM)           # server activation status (0 - active, 1 - inactive)
+    Sl = zeros(horiz)                  # number of free available servers
+    Sst = zeros(horiz, serM)          # server status (0 - free, 1 - busy)
+    Sc = zeros(horiz+1, serM, tserM)  # server conveyor
+    Sin = zeros(horiz, serM, tserM)   # server input
 
-    Saux = zeros(Bool, horiz, serM)       # auxiliary server variable
-    b1_opt = zeros(horiz)
-    # b2_opt = zeros(horiz)
-
-    transition_matrix = zeros(Bool, tserM, tserM)
-    for i in 1:tserM-1
-        transition_matrix[i, i+1] = 1
-    end
+    Saux = zeros(horiz, serM)       # auxiliary server variable
 
     # initial conditions
     X[1] = ic.X0
@@ -48,11 +47,15 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
     L[1] = ic.L0
     Z[1] = ic.Z0
 
+    transition_matrix = zeros(Bool, tserM, tserM)
+    for i in 1:tserM-1
+        transition_matrix[i, i+1] = 1
+    end
+
     cc_om_delay = Model(HiGHS.Optimizer)
     set_silent(cc_om_delay)
 
-    @variable(cc_om_delay, b1[1:horiz], Bin);
-    @variable(cc_om_delay, b2[1:horiz], Bin);
+    @variable(cc_om_delay, b[1:horiz], Bin);
 
     @variable(cc_om_delay, 0 <= XL[1:horiz+1] <= XM, Int)    
     @variable(cc_om_delay, 0 <= YL[1:horiz+1] <= YM, Int)     
@@ -80,8 +83,7 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
     @constraint(cc_om_delay, LL[1] == L[1])
 
     for t in 1:horiz
-        M1 = max(d[t], YM) + 10; # must be larger than d[t] and n[t] 
-        # M2 = max(X[t], serM) + 10; # must be larger than x[k] and Sl[k]
+        M = max(d[t], YM) + 10; # must be larger than d[t] and n[t] 
 
         # Problem constraints  
         @constraint(cc_om_delay, XL[t+1] == XL[t] + phiL[t] - a[t] - CinL[t])
@@ -92,8 +94,8 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
         @constraint(cc_om_delay, nL[t] == YM - YL[t] + phiL[t])  # number of empty slots in the queue
         @constraint(cc_om_delay, QL[t] <= d[t])
         @constraint(cc_om_delay, QL[t] <= nL[t])
-        @constraint(cc_om_delay, QL[t] >= d[t]-M1*b1[t])
-        @constraint(cc_om_delay, QL[t] >= nL[t]-(1-b1[t])*M1)  
+        @constraint(cc_om_delay, QL[t] >= d[t]-M*b[t])
+        @constraint(cc_om_delay, QL[t] >= nL[t]-(1-b[t])*M)  
 
         @constraint(cc_om_delay, drL[t] >= d[t]-nL[t])         
         @constraint(cc_om_delay, drL[t] <= d[t]-QL[t]) 
@@ -111,7 +113,8 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
     end
 
     # Objective function
-    @expression(cc_om_delay, expr, fobj(SL, drL, CinL, phiL, ZL, LL)) 
+    lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.z*sum(Z) +c.L*sum(L)
+    @expression(cc_om_delay, expr, lin_fobj(SL, drL, CinL, phiL, ZL, LL)) 
     @objective(cc_om_delay, Min, expr)
 
     JuMP.optimize!(cc_om_delay)
@@ -139,14 +142,9 @@ function cc_om_delay(ic, bds, a, d, df_input, fobj)
         Sin = round.(JuMP.value.(SinL));
         Saux = round.(JuMP.value.(SauxL));
 
-        b1_opt = round.(JuMP.value.(b1));
-
         J = objective_value(cc_om_delay)
         
-        optimal = true;
-        # Display results
-        # println("Optimal solution:")
-        # println("Objective value = ", objective_value(cc_om_delay))
+        optimal = true
     else        
         optimal = false
         println(status)
