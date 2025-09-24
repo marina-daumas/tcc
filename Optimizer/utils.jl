@@ -58,6 +58,6 @@ function plot_results(res, horiz, i)
     println(res.id)
     evolution = [res.X[i, 1:horiz,1], res.Z[i, 1:horiz,1], res.Ser[i, 1:horiz,1], res.L[i, 1:horiz,1]]
     ylabel = [L"X" L"Z" L"S" L"L"]
-    title = ["queue occupancy" "total customers" "active servers" "lost customers"]
+    title = ["queue occupancy" "total customers served " "active servers" "lost customers"]
     plotData(evolution, ylabel, title)
 end

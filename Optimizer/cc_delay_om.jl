@@ -34,12 +34,11 @@ function cc_delay_om(ic, bds, c, a, d, df_input)
 
     S = zeros(horiz)                   # number of active servers
     Sa = zeros(horiz, serM)           # server activation status (0 - active, 1 - inactive)
-    Sl = zeros(horiz)                  # number of free available servers
+    Sl = zeros(horiz, serM)                  # number of free available servers
     Sst = zeros(horiz, serM)          # server status (0 - free, 1 - busy)
     Sc = zeros(horiz+1, serM, tserM)  # server conveyor
     Sin = zeros(horiz, serM, tserM)   # server input
 
-    Saux = zeros(horiz, serM)       # auxiliary server variable
 
     # initial conditions
     X[1] = ic.X0
@@ -70,12 +69,11 @@ function cc_delay_om(ic, bds, c, a, d, df_input)
     @variable(cc_om_delay, 0 <= CinL[1:horiz] <= serM, Int)   
 
     @variable(cc_om_delay, 0 <= SL[1:horiz] <= serM, Int)  
-    @variable(cc_om_delay, 0 <= SaL[1:horiz, 1:serM], Bin)
-    @variable(cc_om_delay, 0 <= SlL[1:horiz] <= serM, Int)  
-    @variable(cc_om_delay, 0 <= SstL[1:horiz, 1:serM], Bin)  
-    @variable(cc_om_delay, 0 <= ScL[1:horiz+1, 1:serM, 1:tserM], Bin) 
-    @variable(cc_om_delay, 0 <= SinL[1:horiz, 1:serM, 1:tserM], Bin)
-    @variable(cc_om_delay, 0 <= SauxL[1:horiz, 1:serM], Bin)
+    @variable(cc_om_delay, SaL[1:horiz, 1:serM], Bin)
+    @variable(cc_om_delay, SlL[1:horiz, 1:serM], Bin)  
+    @variable(cc_om_delay, SstL[1:horiz, 1:serM], Bin)  
+    @variable(cc_om_delay, ScL[1:horiz+1, 1:serM, 1:tserM], Bin) 
+    @variable(cc_om_delay, SinL[1:horiz, 1:serM, 1:tserM], Bin)
 
     @constraint(cc_om_delay, XL[1] == X[1])
     @constraint(cc_om_delay, YL[1] == Y[1])
@@ -101,15 +99,14 @@ function cc_delay_om(ic, bds, c, a, d, df_input)
         @constraint(cc_om_delay, drL[t] <= d[t]-QL[t]) 
 
         @constraint(cc_om_delay, SL[t] == serM - sum(SaL[t,:]))              
-        @constraint(cc_om_delay, SstL[t, :] == sum(ScL[t,:,:], dims=2))  
-        @constraint(cc_om_delay, SlL[t] == SL[t] - sum(SstL[t,:]))    
-        @constraint(cc_om_delay, [i=1:serM, j=1:tserM], SinL[t, i, j] == df_input[t, i, j] .* SauxL[t, i])
+        @constraint(cc_om_delay, SstL[t, :] == sum(ScL[t,:,:], dims=2))
+        @constraint(cc_om_delay, SlL[t,:] <= ones(Bool, serM) - SstL[t,:] - SaL[t,:])  
+
         @constraint(cc_om_delay, ScL[t+1,:,:] == ScL[t,:,:]*transition_matrix + SinL[t,:,:])
-
-        @constraint(cc_om_delay, CinL[t] <= SlL[t])
-
-        @constraint(cc_om_delay, SauxL[t,:] <= ones(Bool, serM) - SstL[t,:] - SaL[t,:])  
-        @constraint(cc_om_delay, CinL[t] == sum(SauxL[t,:]))  
+        @constraint(cc_om_delay, [i=1:serM, j=1:tserM], SinL[t, i, j] == df_input[t, i, j] .* SlL[t, i])
+        
+        @constraint(cc_om_delay, CinL[t] <= sum(SlL[t,:]))
+ 
     end
 
     # Objective function
@@ -140,7 +137,6 @@ function cc_delay_om(ic, bds, c, a, d, df_input)
         Sst = round.(JuMP.value.(SstL));
         Sc = round.(JuMP.value.(ScL));
         Sin = round.(JuMP.value.(SinL));
-        Saux = round.(JuMP.value.(SauxL));
 
         J = objective_value(cc_om_delay)
         
@@ -150,6 +146,6 @@ function cc_delay_om(ic, bds, c, a, d, df_input)
         println(status)
     end
     
-    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, S, Sl, Sa, Sst, Sc, Sin, Saux, J
+    return optimal, X, Y, Z, L, n, Q, dr, phi, Cin, S, Sl, Sa, Sst, Sc, Sin, J
 
 end
