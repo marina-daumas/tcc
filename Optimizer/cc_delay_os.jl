@@ -120,7 +120,7 @@ function cc_delay_os(ic, bds, c, a, d, df_input)
         
         # Objective function
 
-        lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.z*sum(Z) +c.L*sum(L)
+        lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.Z*sum(Z) +c.L*sum(L)
         @expression(cc_os_delay, expr, lin_fobj(SL, drL, CinL, phiL, ZL[2], LL[2])) 
         @objective(cc_os_delay, Min, expr)
 

@@ -3,6 +3,8 @@ using PrettyTables
 using Distributions
 using LaTeXStrings
 using Plots
+using CSV
+using DataFrames
 
 
 function demand_generator_mat(N_dem, demand_length, dM, demand_type, std_dev)
@@ -49,8 +51,9 @@ end
 
 function plotData(evolution, ylabel, title)
     gr()
-    plot(evolution, layout = 4, seriestype=:scatter, label=false,xlabel=[L"k" L"k" L"k" L"k"],ylabel=ylabel, title=title,
+    p = plot(evolution, layout = 4, seriestype=:scatter, label=false,xlabel=[L"k" L"k" L"k" L"k"],ylabel=ylabel, title=title,
         palette=cgrad.([:grays :blues :heat :lightrainbow]), bg_inside=[:lightblue :lightblue :lightblue :lightblue])
+    display(p)
 end
 
 
@@ -60,4 +63,28 @@ function plot_results(res, horiz, i)
     ylabel = [L"X" L"Z" L"S" L"L"]
     title = ["queue occupancy" "total customers served " "active servers" "lost customers"]
     plotData(evolution, ylabel, title)
+end
+
+
+function add_line_to_csv(result_id, res, horiz, d_prop, a_prop, cost, av_blr, av_dr, av_ser, total_clients)
+    df = DataFrame(result_id=result_id, model_id=res.id, horiz=horiz, XM=res.bds.XM, YM=res.bds.YM, phiM=res.bds.phiM, serM=res.bds.serM, tserM=res.bds.tserM, 
+    d_type=d_prop.type, dM=d_prop.M, d_std_dev=d_prop.std_dev, a_type=a_prop.type, aM=a_prop.M, a_std_dev=a_prop.std_dev,
+    c_blr=res.c.blr, c_ser=res.c.ser, c_Z=res.c.Z, c_L=res.c.L,
+    cost=cost, av_blr=av_blr, av_dr=av_dr, av_ser=av_ser, total_clients=total_clients)
+
+    CSV.write("results.csv", df, append=true)
+end
+
+
+function compute_metrics(res, horiz, N)
+    blr = res.L./(res.L.+res.Z)
+
+    av_blr = sum(blr)/(N*horiz) 
+    av_ser = sum(res.Ser)/(N*horiz)
+    av_dr = sum(res.dr)/(N*horiz)
+
+    total_clients = sum(res.Z[:,horiz+1])/N
+    cost = res.c.ser*av_ser+ res.c.blr*av_blr
+
+    return cost, av_blr, av_dr, av_ser, total_clients
 end
