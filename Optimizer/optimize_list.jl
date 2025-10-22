@@ -1,7 +1,7 @@
-include("cc_no_delay_os.jl")
-include("cc_no_delay_om.jl")
-include("cc_delay_os.jl")
-include("cc_delay_om.jl")
+include("optimizers//cc_no_delay_os.jl")
+include("optimizers//cc_no_delay_om.jl")
+include("optimizers//cc_delay_os.jl")
+include("optimizers//cc_delay_om.jl")
 
 function optimize_list(id, d_mat, a_mat)
 
@@ -39,13 +39,13 @@ function optimize_list(id, d_mat, a_mat)
     Sc = zeros(N, horiz+1, bds.serM, bds.tserM)  # server conveyor
     Sin = zeros(N, horiz, bds.serM, bds.tserM)   # server input
 
-
+    av_count = 0
     for i in 1:N
 
         status_opt[i] = false;
-        count = 1          
+        count = 0          
             
-        while !status_opt[i] && count<=limit_count
+        while !status_opt[i] && count<limit_count
             d = d_mat[1:horiz, i];  # demand for incoming calls
             a = a_mat[1:horiz, i];  # abandonment for calls
             
@@ -61,19 +61,22 @@ function optimize_list(id, d_mat, a_mat)
             
             # If infeasibilities are found, replace demand with a new one and try again  
             if !status_opt[i]
-                println("At least one solution is infeasible, replacing demand ", i, "(count = ", count, "/", limit_count, ")")
-                d_mat[1:horiz, i] = demand_generator_mat(1, horiz, d_prop.M, d_prop.type, d_prop.std_dev); #demand_generator_mat(3,20,14,"uniform",1)
-                a_mat[1:horiz, i] = demand_generator_mat(1, horiz, a_prop.M, a_prop.type, a_prop.std_dev);
                 count = count+1;
-
                 if count>=limit_count
                     println("WARNING: No feasible solutions for demand ", i, " found after ", limit_count, " atempts of generating a new one")
+                else
+                    d_mat[1:horiz, i] = demand_generator_mat(1, horiz, d_prop.M, d_prop.type, d_prop.std_dev); #demand_generator_mat(3,20,14,"uniform",1)
+                    a_mat[1:horiz, i] = demand_generator_mat(1, horiz, a_prop.M, a_prop.type, a_prop.std_dev);
+                    println("At least one solution is infeasible, replacing demand ", i, "(count = ", count, "/", limit_count, ")")
                 end
+                
             end              
-        end        
+        end
+        av_count += count        
     end
+    av_count = av_count/N
 
     res = result(id, status_opt, X, Y, Z, L, n, Q, dr, phi, Cin, Ser, Sl, Sa, Sst, Sc, Sin, J, c, bds);
     print(status_opt)
-    return res, d_mat, a_mat
+    return res, d_mat, a_mat, av_count
 end

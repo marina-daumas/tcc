@@ -19,7 +19,7 @@ function cc_delay_om(ic, bds, c, a, d, df_input)
     serM = bds.serM
     tserM = bds.tserM
 
-    J = zeros(horiz)            # cost function
+    J = 0                  # cost function
     X = zeros(horiz+1)     # current number of customers in queue x(k)S
     Y = zeros(horiz+1)     # current number of customers in buffer y(k)  
     Z = zeros(horiz+1)     # custumers served  
