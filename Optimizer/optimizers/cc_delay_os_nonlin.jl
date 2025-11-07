@@ -5,7 +5,7 @@ using JuMP
 using HiGHS
 using Ipopt
 
-function cc_delay_os(ic, bds, c, a, d, df_input)
+function cc_delay_os_nonlin(ic, bds, c, a, d, df_input)
     # Time horizon
     horiz = length(d)
 
@@ -40,6 +40,8 @@ function cc_delay_os(ic, bds, c, a, d, df_input)
     Sc = zeros(horiz+1, serM, tserM)  # server conveyor
     Sin = zeros(horiz, serM, tserM)   # server input
 
+    blr = zeros(horiz+1) # Non lin
+
     transition_matrix = zeros(Bool, tserM, tserM)
     for i in 1:tserM-1
         transition_matrix[i, i+1] = 1
@@ -51,10 +53,24 @@ function cc_delay_os(ic, bds, c, a, d, df_input)
     L[1] = ic.L0
     Z[1] = ic.Z0
 
+    blr[1] = L[1]/(L[1] + Z[1]) # Non lin
+    
     # Optimization loop
     for t in 1:horiz
         # Setting up solver
-        cc_os_delay = Model(HiGHS.Optimizer)
+        ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
+        highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
+
+        cc_os_delay = Model(
+            optimizer_with_attributes(
+                Juniper.Optimizer, 
+                "nl_solver" => ipopt,
+                "mip_solver" => highs, 
+                "allow_almost_solved" => false,
+                "feasibility_pump" => true        
+                ))      # Non lin
+
+        # cc_os_delay = Model(HiGHS.Optimizer)
 
         # No screen output
         set_silent(cc_os_delay)
@@ -124,9 +140,11 @@ function cc_delay_os(ic, bds, c, a, d, df_input)
         @constraint(cc_os_delay, CinL <= sum(SlL))        
         
         # Objective function
-        lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.Z*sum(Z) +c.L*sum(L)
-        @expression(cc_os_delay, expr, lin_fobj(SL, drL, CinL, phiL, ZL[2], LL[2])) 
-        @objective(cc_os_delay, Min, expr)
+        # lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.Z*sum(Z) +c.L*sum(L)
+        # @expression(cc_os_delay, expr, lin_fobj(SL, drL, CinL, phiL, ZL[2], LL[2])) 
+        # @objective(cc_os_delay, Min, expr)
+
+        @NLobjective(cc_os_delay, Min, c.ser*SL + c.blr*LL[2]/(LL[2] + ZL[2])) # Non lin
         
         # Compute solution  
         JuMP.optimize!(cc_os_delay)
@@ -155,7 +173,8 @@ function cc_delay_os(ic, bds, c, a, d, df_input)
             Sin[t,:,:] = round.(JuMP.value.(SinL));
 
             J[t] = objective_value(cc_os_delay)
-            
+
+            blr[t+1] = L[t+1]/(L[t+1] + Z[t+1]) # Non lin
             optimal = true;
         else
              # Informs the calling function the problem is infeasible for this demand
