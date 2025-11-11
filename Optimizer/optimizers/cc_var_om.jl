@@ -3,9 +3,9 @@
 
 using JuMP
 using HiGHS
-using Ipopt
 
-function cc_delay_om_nonlin(ic, bds, c, a, d, df_input)
+
+function cc_var_om(ic, bds, c, a, d, df_input)
     # Time horizon
     horiz = length(d)
 
@@ -19,7 +19,6 @@ function cc_delay_om_nonlin(ic, bds, c, a, d, df_input)
     serM = bds.serM
     tserM = bds.tserM
 
-    # Output variables
     J = 0                  # cost function
     X = zeros(horiz+1)     # current number of customers in queue x(k)S
     Y = zeros(horiz+1)     # current number of customers in buffer y(k)  
@@ -40,7 +39,6 @@ function cc_delay_om_nonlin(ic, bds, c, a, d, df_input)
     Sc = zeros(horiz+1, serM, tserM)  # server conveyor
     Sin = zeros(horiz, serM, tserM)   # server input
 
-    blr = zeros(horiz+1)
 
     # initial conditions
     X[1] = ic.X0
@@ -53,18 +51,7 @@ function cc_delay_om_nonlin(ic, bds, c, a, d, df_input)
         transition_matrix[i, i+1] = 1
     end
 
-    ipopt  = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
-    mipSolver = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
-    
-    cc_om_delay = Model(
-        optimizer_with_attributes(
-            Juniper.Optimizer, 
-            "nl_solver" => ipopt,
-            "mip_solver" => mipSolver, 
-            "allow_almost_solved" => false,
-            "feasibility_pump" => true
-            ))
-
+    cc_om_delay = Model(HiGHS.Optimizer)
     set_silent(cc_om_delay)
 
     @variable(cc_om_delay, b[1:horiz], Bin);
@@ -123,10 +110,9 @@ function cc_delay_om_nonlin(ic, bds, c, a, d, df_input)
     end
 
     # Objective function
-    fobj_nl(s,L,Z) = c.ser*sum(s) + c.blr*sum( L./(L .+ Z))
-    @expression(cc_om_delay, expr, fobj_nl(SL, LL, ZL))    
-    @objective(cc_om_delay, Min, expr) # uses the expression to define the nonlinear objective function   
-    
+    lin_fobj(S, dr, Cin, phi, Z, L) = c.ser*sum(S) - c.Z*sum(Z) +c.L*sum(L)
+    @expression(cc_om_delay, expr, lin_fobj(SL, drL, CinL, phiL, ZL, LL)) 
+    @objective(cc_om_delay, Min, expr)
 
     JuMP.optimize!(cc_om_delay)
 
@@ -154,8 +140,6 @@ function cc_delay_om_nonlin(ic, bds, c, a, d, df_input)
 
         J = objective_value(cc_om_delay)
         
-        blr = L ./(L .+ Z)
-        print(blr)
         optimal = true
     else        
         optimal = false

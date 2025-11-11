@@ -26,5 +26,7 @@ Manifest.toml
 
 *test.ipynb
 
-Optimizer/exogenous_vars/*
+# Optimizer/exogenous_vars/*
 Optimizer/results/*
+
+.vscode/*

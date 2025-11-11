@@ -49,7 +49,11 @@ function printTable(data, header)
 end
 
 
-function plot_data(evolution, label, ylabel, title)
+
+function plot_results(label, ylabel, title, res, horiz, i, blr, d, a)
+    println(res.id)
+    evolution = [res.X[i, 1:horiz,1], res.Y[i, 1:horiz,1], res.Ser[i, 1:horiz,1], blr[i, 1:horiz,1], d[1:horiz, i, 1], a[1:horiz, i, 1]]
+    
     p = plot(layout = (3,2), size=(900,600), legend=:bottomright)
 
     nsubs = 6
@@ -68,15 +72,12 @@ function plot_data(evolution, label, ylabel, title)
     display(p)
 end
 
-function plot_results(label, ylabel, title, res, metrics, i, blr, d, a)
-    horiz = metrics[!, "horiz"][1]
-    println(res.id)
-    evolution = [res.X[i, 1:horiz,1], res.Y[i, 1:horiz,1], res.Ser[i, 1:horiz,1], blr[i, 1:horiz,1], d[1:horiz, i, 1], a[1:horiz, i, 1]]
-    
-    plot_data(evolution, label, ylabel, title)
-end
 
-function plot_paired_data(evolution, label, ylabel, title)
+function plot_paired_results(label, ylabel, title, res, horiz, i, blr, d, a, res2, blr2, d2, a2)
+    println(res.id)
+    evolution = [res.X[i, 1:horiz,1], res.Y[i, 1:horiz,1], res.Ser[i, 1:horiz,1], blr[i, 1:horiz,1], d[1:horiz, i, 1], a[1:horiz, i, 1], 
+        res2.X[i, 1:horiz,1], res2.Y[i, 1:horiz,1], res2.Ser[i, 1:horiz,1], blr2[i, 1:horiz,1]]
+    
     p = plot(layout = (3,2), size=(900,600), legend=:bottomright)
 
     nsubs = 6
@@ -106,14 +107,6 @@ function plot_paired_data(evolution, label, ylabel, title)
     display(p)
 end
 
-function plot_paired_results(label, ylabel, title, res, metrics, i, blr, d, a, res2, blr2, d2, a2)
-    horiz = metrics[!, "horiz"][1]
-    println(res.id)
-    evolution = [res.X[i, 1:horiz,1], res.Y[i, 1:horiz,1], res.Ser[i, 1:horiz,1], blr[i, 1:horiz,1], d[1:horiz, i, 1], a[1:horiz, i, 1], 
-        res2.X[i, 1:horiz,1], res2.Y[i, 1:horiz,1], res2.Ser[i, 1:horiz,1], blr2[i, 1:horiz,1]]
-    
-    plot_paired_data(evolution, label, ylabel, title)
-end
 
 function add_line_to_csv(result_id, res, horiz, d_prop, a_prop, cost, av_blr, av_dr, av_ser, total_clients, count)
     df = DataFrame(result_id=result_id, model_id=res.id, horiz=horiz, XM=res.bds.XM, YM=res.bds.YM, phiM=res.bds.phiM, serM=res.bds.serM, tserM=res.bds.tserM, 
@@ -137,6 +130,60 @@ function compute_metrics(res, horiz, N)
 
     return cost, av_blr, av_dr, av_ser, total_clients, blr
 end
+
+
+function compute_and_plot_paired_results(filename1, filename2, horiz, N, experiment, label)
+        d_mat2, a_mat2 = nothing, nothing
+        d_mat, a_mat = nothing, nothing
+
+        model_dict = deserialize("results//"*filename1)
+        a_mat = model_dict["a"]
+        d_mat = model_dict["d"]
+        res = model_dict["res"]
+
+        model_dict2 = deserialize("results//"*filename2)
+        a_mat2 = model_dict2["a"]
+        d_mat2 = model_dict2["d"]
+        res2 = model_dict2["res"]
+
+
+        cost, av_blr, av_dr, av_ser, total_clients, blr = compute_metrics(res, horiz, N)
+        cost2, av_blr2, av_dr2, av_ser2, total_clients2, blr2 = compute_metrics(res2, horiz, N)
+
+
+        println("Cost: ", cost, " vs ", cost2)
+        println("Av ser: ", av_ser, " vs ", av_ser2)
+        println("Av blr: ", av_blr, " vs ", av_blr2)
+
+        ylabel = [L"X" L"Y" L"Ser" L"blr" L"d" L"a"]
+        title = ["Ocupação da fila" "Ocupação do buffer" "Servidores ativos" "Taxa de balking" "Demanda" "Abandonos"]
+
+        plot_paired_results(label, ylabel, title, res, horiz, experiment, blr, d_mat, a_mat, res2, blr2, d_mat2, a_mat2)
+end
+
+
+function compute_and_plot_results(filename, horiz, N, experiment, label)
+    d_mat, a_mat = nothing, nothing
+
+    model_dict = deserialize("results//"*filename)
+    a_mat = model_dict["a"]
+    d_mat = model_dict["d"]
+    res = model_dict["res"]
+
+    cost, av_blr, av_dr, av_ser, total_clients, blr = compute_metrics(res, horiz, N)
+
+    println("Cost: ", cost)
+    println("Av ser: ", av_ser)
+    println("Av blr: ", av_blr)
+
+
+    ylabel = [L"X" L"Y" L"Ser" L"blr" L"d" L"a"]
+    title = ["Ocupação da fila" "Ocupação do buffer" "Servidores ativos" "Taxa de balking" "Demanda" "Abandonos"]
+    
+
+    plot_results(label, ylabel, title, res, horiz, experiment, blr, d_mat, a_mat)
+end
+
 
 #### Structs ####
 

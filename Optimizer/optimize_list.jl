@@ -1,17 +1,25 @@
-include("optimizers//cc_no_delay_os.jl")
-include("optimizers//cc_no_delay_om.jl")
-include("optimizers//cc_delay_os.jl")
-include("optimizers//cc_delay_om.jl")
+include("optimizers//cc_inst_os.jl")
+include("optimizers//cc_inst_om.jl")
+
+include("optimizers//cc_inst_os_lin.jl")
+include("optimizers//cc_inst_om_lin.jl")
+
+include("optimizers//cc_var_os.jl")
+include("optimizers//cc_var_om.jl")
 
 
-include("optimizers//cc_delay_os_nonlin.jl")
-include("optimizers//cc_delay_om_nonlin.jl")
+include("optimizers//cc_var_os_nonlin.jl")
+include("optimizers//cc_var_om_nonlin.jl")
 
 
 function optimize_list(id, d_mat, a_mat)
 
     if occursin("nd", id)
-        c = c_nd
+        if occursin("lin", id)
+            c = c_d        
+        else
+            c = c_nd
+        end
         bds = bds_nd
     else
         c = c_d
@@ -54,18 +62,22 @@ function optimize_list(id, d_mat, a_mat)
             d = d_mat[1:horiz, i];  # demand for incoming calls
             a = a_mat[1:horiz, i];  # abandonment for calls
             
-            if id == "nd_os" 
-                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Ser[i,:],J[i,:] = cc_no_delay_os(ic,bds,c,a,d);
+            if id == "nd_os_lin" 
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Ser[i,:],J[i,:] = cc_inst_os_lin(ic,bds,c,a,d);
+            elseif id == "nd_om_lin"
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Ser[i,:],J[i] = cc_inst_om_lin(ic,bds,c,a,d);
+            elseif id == "nd_os" 
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Ser[i,:],J[i,:] = cc_inst_os(ic,bds,c,a,d);
             elseif id == "nd_om"
-                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Ser[i,:],J[i] = cc_no_delay_om(ic,bds,c,a,d);
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Ser[i,:],J[i] = cc_inst_om(ic,bds,c,a,d);
             elseif id == "d_os" 
-                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i,:] = cc_delay_os(ic,bds,c,a,d,df_input);
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i,:] = cc_var_os(ic,bds,c,a,d,df_input);
             elseif id == "d_om" 
-                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i] = cc_delay_om(ic,bds,c,a,d,df_input);
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i] = cc_var_om(ic,bds,c,a,d,df_input);
             elseif id == "d_os_nonlin"
-                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i,:] = cc_delay_os_nonlin(ic,bds,c,a,d,df_input);
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i,:] = cc_var_os_nonlin(ic,bds,c,a,d,df_input);
             elseif id == "d_om_nonlin"
-                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i] = cc_delay_om_nonlin(ic,bds,c,a,d,df_input);
+                status_opt[i],X[i,:],Y[i,:],Z[i,:],L[i,:],n[i,:],Q[i,:],dr[i,:],phi[i,:],Cin[i,:],Ser[i,:],Sl[i,:,:],Sa[i,:,:],Sst[i,:,:],Sc[i,:,:,:],Sin[i,:,:,:],J[i] = cc_var_om_nonlin(ic,bds,c,a,d,df_input);
             end                
             
             # If infeasibilities are found, replace demand with a new one and try again  

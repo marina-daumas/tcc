@@ -6,7 +6,7 @@ using Ipopt
 using HiGHS
 using Juniper
 
-function cc_no_delay_os(ic, bds, c, a, d)
+function cc_inst_os_lin(ic, bds, c, a, d)
     # Time horizon
     horiz = length(d)
 
@@ -44,17 +44,7 @@ function cc_no_delay_os(ic, bds, c, a, d)
     # Optimization loop
     for t in 1:horiz  
         # Setting up solvers and their attributes
-        ipopt = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 1)
-        highs = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
-
-        cc_nl_fobj_os = Model(
-            optimizer_with_attributes(
-                Juniper.Optimizer, 
-                "nl_solver" => ipopt,
-                "mip_solver" => highs, 
-                "allow_almost_solved" => false,
-                "feasibility_pump" => true        
-                ))      
+        cc_nl_fobj_os = Model(HiGHS.Optimizer)    
             
         # No screen output
         set_silent(cc_nl_fobj_os)
@@ -101,7 +91,9 @@ function cc_no_delay_os(ic, bds, c, a, d)
         @constraint(cc_nl_fobj_os, 0 <= YL[2] <= YM)
        
         # Objective function     
-        @NLobjective(cc_nl_fobj_os, Min, c.ser*serL + c.blr*LL[2]/(LL[2] + ZL[2]))
+        lin_fobj(S, dr, phi, Z, L) = c.ser*sum(S) - c.Z*sum(Z) +c.L*sum(L)
+        @expression(cc_nl_fobj_os, expr, lin_fobj(serL, drL, phiL, ZL[2], LL[2])) 
+        @objective(cc_nl_fobj_os, Min, expr)
 
         # Compute solution  
         JuMP.optimize!(cc_nl_fobj_os)

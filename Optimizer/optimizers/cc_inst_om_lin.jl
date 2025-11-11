@@ -7,7 +7,7 @@ using HiGHS
 using Juniper
 using GLPK #not being used 
 
-function cc_no_delay_om(ic, bds, c, a, d)
+function cc_inst_om_lin(ic, bds, c, a, d)
     # Time horizon
     horiz = length(d)
 
@@ -42,17 +42,7 @@ function cc_no_delay_om(ic, bds, c, a, d)
     Z[1] = ic.Z0    
     
     # Setting up solvers and their attributes
-    ipopt  = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
-    mipSolver = optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false)
-    
-    cc_nl_fobj_om = Model(
-        optimizer_with_attributes(
-            Juniper.Optimizer, 
-            "nl_solver" => ipopt,
-            "mip_solver" => mipSolver, 
-            "allow_almost_solved" => false,
-            "feasibility_pump" => true
-            ))
+    cc_nl_fobj_om = Model(HiGHS.Optimizer)
   
     # No screen output
     set_silent(cc_nl_fobj_om)
@@ -100,10 +90,10 @@ function cc_no_delay_om(ic, bds, c, a, d)
         @constraint(cc_nl_fobj_om, 0 <= YL[t+1] <= YM)
     end
     
-   
-    fobj_nl(s,L,Z) = c.ser*sum(s) + c.blr*sum( L./(L .+ Z))
-    @expression(cc_nl_fobj_om, expr, fobj_nl(serL, LL, ZL))    
-    @objective(cc_nl_fobj_om, Min, expr) # uses the expression to define the nonlinear objective function   
+
+    lin_fobj(S, dr, phi, Z, L) = c.ser*sum(S) - c.Z*sum(Z) +c.L*sum(L)
+    @expression(cc_nl_fobj_om, expr, lin_fobj(serL, drL, phiL, ZL, LL)) 
+    @objective(cc_nl_fobj_om, Min, expr)
     
     # Compute solution    
     JuMP.optimize!(cc_nl_fobj_om)
